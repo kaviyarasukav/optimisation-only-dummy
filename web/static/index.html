@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EMA Crossover High-Speed Optimization Engine</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Plotly CDN for Charts & Heatmaps -->
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <div class="app-container">
+    
+    <!-- Sidebar Controls -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo-icon">⚡</div>
+        <div>
+          <h2>Ruflo Optim Engine</h2>
+          <p class="subtitle">High-Speed EMA Brute-Force Suite</p>
+        </div>
+      </div>
+
+      <form id="optForm" onsubmit="event.preventDefault(); runOptimization();">
+        <div class="form-group">
+          <label for="symbolSelect">Asset Symbol</label>
+          <select id="symbolSelect" class="form-control">
+            <optgroup label="Crypto (Binance API)" id="cryptoOptGroup"></optgroup>
+            <optgroup label="TradFi (Yahoo Finance)" id="tradfiOptGroup"></optgroup>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="timeframeSelect">Timeframe</label>
+          <select id="timeframeSelect" class="form-control">
+            <option value="5m">5 Minute (5m)</option>
+            <option value="15m">15 Minute (15m)</option>
+            <option value="30m">30 Minute (30m)</option>
+            <option value="1h" selected>1 Hour (1h)</option>
+            <option value="2h">2 Hour (2h)</option>
+            <option value="4h">4 Hour (4h)</option>
+          </select>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Fast EMA Range ($X$)</label>
+            <div class="range-inputs">
+              <input type="number" id="fastMin" value="5" min="2" max="100">
+              <span>to</span>
+              <input type="number" id="fastMax" value="50" min="5" max="150">
+            </div>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Slow EMA Range ($Y$)</label>
+            <div class="range-inputs">
+              <input type="number" id="slowMin" value="10" min="5" max="150">
+              <span>to</span>
+              <input type="number" id="slowMax" value="200" min="20" max="400">
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="inSampleRatio">In-Sample Data Split (Training)</label>
+          <select id="inSampleRatio" class="form-control">
+            <option value="0.7" selected>70% In-Sample / 30% Unseen Out-of-Sample</option>
+            <option value="0.8">80% In-Sample / 20% Unseen Out-of-Sample</option>
+            <option value="0.6">60% In-Sample / 40% Unseen Out-of-Sample</option>
+          </select>
+        </div>
+
+        <button type="submit" id="submitBtn" class="btn btn-primary">
+          <span id="btnText">🚀 Run Brute Force Optimization</span>
+          <span id="btnSpinner" class="spinner hidden"></span>
+        </button>
+      </form>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      
+      <!-- Top Header Bar -->
+      <header class="header">
+        <div class="header-info">
+          <h1 id="headerTitle">BTCUSDT 1h Optimization Dashboard</h1>
+          <p id="headerSub">Select parameters and launch parallel CPU grid search</p>
+        </div>
+        <div class="status-badge" id="statusBadge">Ready</div>
+      </header>
+
+      <!-- KPI Summary Metrics Grid -->
+      <div class="kpi-grid">
+        <div class="kpi-card glass">
+          <div class="kpi-label">Top Strategy EMA</div>
+          <div class="kpi-value highlight" id="kpiBestEMA">EMA -- / --</div>
+          <div class="kpi-sub" id="kpiSplits">In-Sample vs Unseen</div>
+        </div>
+
+        <div class="kpi-card glass">
+          <div class="kpi-label">Net Profit (%)</div>
+          <div class="kpi-value positive" id="kpiNetProfit">+0.00%</div>
+          <div class="kpi-sub" id="kpiNetProfitDollars">$0.00</div>
+        </div>
+
+        <div class="kpi-card glass">
+          <div class="kpi-label">Profit Factor</div>
+          <div class="kpi-value" id="kpiProfitFactor">0.00</div>
+          <div class="kpi-sub" id="kpiWinRate">Win Rate: 0.0%</div>
+        </div>
+
+        <div class="kpi-card glass">
+          <div class="kpi-label">Unseen Data Profit (%)</div>
+          <div class="kpi-value" id="kpiUnseenProfit">+0.00%</div>
+          <div class="kpi-sub" id="kpiUnseenSub">Out-of-Sample Validation</div>
+        </div>
+
+        <div class="kpi-card glass">
+          <div class="kpi-label">Avg Holding Duration</div>
+          <div class="kpi-value" id="kpiHolding">0 bars</div>
+          <div class="kpi-sub" id="kpiHoldingSub">Min: 0 | Max: 0 bars</div>
+        </div>
+      </div>
+
+      <!-- Optimization Heatmap Surface -->
+      <div class="card glass chart-card">
+        <div class="card-header">
+          <h3>🔥 2D Parameter Surface Heatmap (Fast EMA vs Slow EMA Return %)</h3>
+          <p>Color density indicates Net Profit % for each combination</p>
+        </div>
+        <div id="heatmapPlot" class="chart-container"></div>
+      </div>
+
+      <!-- Equity & Drawdown Charts -->
+      <div class="grid-2col">
+        <div class="card glass chart-card">
+          <div class="card-header">
+            <h3>📈 Cumulative Equity Curve</h3>
+          </div>
+          <div id="equityPlot" class="chart-container"></div>
+        </div>
+
+        <div class="card glass chart-card">
+          <div class="card-header">
+            <h3>📉 Drawdown & Profit Accumulation</h3>
+          </div>
+          <div id="drawdownPlot" class="chart-container"></div>
+        </div>
+      </div>
+
+      <!-- Strategy Leaderboard, Multi-Asset Visuals, Graphify Topology & Trade Log Tabs -->
+      <div class="card glass table-card">
+        <div class="tab-header">
+          <button class="tab-btn active" onclick="switchTab('leaderboard')">🏆 Strategy Leaderboard (Top 20 Combinations)</button>
+          <button class="tab-btn" onclick="switchTab('multivis')">📊 Multi-Asset & Timeframe Matrix Visuals</button>
+          <button class="tab-btn" onclick="switchTab('graphify')">🌐 Graphify Strategy Topology Network</button>
+          <button class="tab-btn" onclick="switchTab('tradelog')">📜 Detailed Trade Log</button>
+        </div>
+
+        <!-- Leaderboard Table -->
+        <div id="leaderboardTab" class="tab-content active">
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>Fast EMA ($X$)</th>
+                  <th>Slow EMA ($Y$)</th>
+                  <th>Net Profit (%)</th>
+                  <th>Win Rate (%)</th>
+                  <th>Profit Factor</th>
+                  <th>Max Drawdown (%)</th>
+                  <th>Total Trades</th>
+                  <th>Avg Hold Bars</th>
+                </tr>
+              </thead>
+              <tbody id="leaderboardTbody">
+                <tr><td colspan="9" class="text-muted text-center">Run an optimization to view top strategy combinations.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Multi-Asset & Timeframe Visuals Tab -->
+        <div id="multivisTab" class="tab-content">
+          <p style="font-size: 13px; color: var(--text-sub); margin-bottom: 12px;">
+            Multi-dimensional interactive analytics comparing performance across all assets (BTC, ETH, SOL, XRP, DOGE, PEPE, BIO, GOLD, SILVER, NASDAQ, S&P 500) and timeframes (5m, 15m, 30m, 1h, 2h, 4h).
+          </p>
+          <iframe id="multivisIframe" src="/static/master_visuals.html" style="width: 100%; height: 920px; border: 1px solid var(--border-color); border-radius: 10px; background: #0a0e17;"></iframe>
+        </div>
+
+        <!-- Graphify Network Topology Tab -->
+        <div id="graphifyTab" class="tab-content">
+          <p style="font-size: 13px; color: var(--text-sub); margin-bottom: 12px;">
+            Interactive physics-based graph network visualizing strategy parameter clusters, profit factor weights, and topological proximity. Drag nodes to explore parameter space!
+          </p>
+          <iframe id="graphIframe" src="/static/strategy_graph.html" style="width: 100%; height: 520px; border: 1px solid var(--border-color); border-radius: 10px; background: #0a0e17;"></iframe>
+        </div>
+
+        <!-- Trade Log Table -->
+        <div id="tradelogTab" class="tab-content">
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Entry Time</th>
+                  <th>Exit Time</th>
+                  <th>Entry Price</th>
+                  <th>Exit Price</th>
+                  <th>Return (%)</th>
+                  <th>PnL ($)</th>
+                  <th>Hold Duration</th>
+                  <th>Result</th>
+                </tr>
+              </thead>
+              <tbody id="tradelogTbody">
+                <tr><td colspan="9" class="text-muted text-center">No trades available. Run an optimization first.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+    </main>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
